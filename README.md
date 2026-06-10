@@ -1,6 +1,8 @@
 # MLP do Zero — Classificação de Dígitos MNIST
 
-Implementação manual de um Multi-Layer Perceptron usando **apenas NumPy**, sem PyTorch, TensorFlow ou qualquer framework de deep learning.
+Implementação manual de um **Multi-Layer Perceptron** para classificar dígitos manuscritos do dataset **MNIST**.
+
+A rede neural foi implementada com **NumPy**, sem PyTorch, TensorFlow, Keras, JAX ou frameworks de deep learning. Bibliotecas auxiliares, como Matplotlib e Scikit-learn, foram usadas apenas para visualização e análise dos resultados, não para construir ou treinar o modelo.
 
 ---
 
@@ -9,7 +11,6 @@ Implementação manual de um Multi-Layer Perceptron usando **apenas NumPy**, sem
 ### Pré-requisitos
 
 ```bash
-# Clone o repositório e instale as dependências
 pip install -r requirements.txt
 ```
 
@@ -23,13 +24,8 @@ jupyter notebook experimentos.ipynb
 ### Teste rápido das implementações
 
 ```bash
-# Testa funções de ativação
 python -m mlp.activations
-
-# Testa funções de loss
 python -m mlp.losses
-
-# Testa otimizadores
 python -m mlp.optimizers
 ```
 
@@ -37,16 +33,17 @@ python -m mlp.optimizers
 
 ## Estrutura do Repositório
 
-```
+```txt
 .
 ├── README.md
 ├── requirements.txt
 ├── mlp/
 │   ├── __init__.py          ← exports públicos do pacote
 │   ├── activations.py       ← ReLU, Softmax, Sigmoid, Tanh e derivadas
-│   ├── losses.py            ← Cross-Entropy, one-hot, gradiente combinado
+│   ├── losses.py            ← Cross-Entropy, one-hot e gradiente combinado
 │   ├── optimizers.py        ← SGD e SGD com Momentum
-│   └── network.py           ← Classe MLP completa
+│   ├── network.py           ← classe MLP completa
+│   └── data.py              ← carregamento do MNIST em formato IDX
 ├── notebooks/
 │   └── experimentos.ipynb   ← experimentos, plots e comparações
 └── results/
@@ -56,17 +53,16 @@ python -m mlp.optimizers
     └── exemplos_erro.png
 ```
 
----
-
-## Arquitetura Escolhida
+## Arquiteturas Avaliadas
 
 ### Configuração A — Baseline
 
 | Parâmetro | Valor |
-|-----------|-------|
+|---|---|
 | Arquitetura | 784 → 256 → 128 → 10 |
-| Ativação (ocultas) | ReLU |
-| Ativação (saída) | Softmax |
+| Camadas ocultas | 2 |
+| Ativação nas ocultas | ReLU |
+| Ativação na saída | Softmax |
 | Loss | Cross-Entropy |
 | Otimizador | SGD |
 | Learning rate | 0.01 |
@@ -77,24 +73,29 @@ python -m mlp.optimizers
 ### Configuração B — Rede Maior com Momentum
 
 | Parâmetro | Valor |
-|-----------|-------|
+|---|---|
 | Arquitetura | 784 → 512 → 256 → 128 → 10 |
-| Ativação (ocultas) | ReLU |
-| Ativação (saída) | Softmax |
+| Camadas ocultas | 3 |
+| Ativação nas ocultas | ReLU |
+| Ativação na saída | Softmax |
 | Loss | Cross-Entropy |
-| Otimizador | SGD + Momentum (β=0.9) |
+| Otimizador | SGD + Momentum |
+| Momentum | 0.9 |
 | Learning rate | 0.01 |
 | Batch size | 64 |
 | Épocas | 30 |
 | Inicialização | He |
 
-**Por que essas escolhas?**
+---
 
-- **ReLU nas ocultas**: gradiente constante para z > 0, sem vanishing gradient para redes de profundidade moderada.
-- **Softmax na saída**: transforma logits em probabilidades somando 1, ideal para classificação multi-classe.
-- **He initialization**: compensa o fato de ReLU zerar metade das unidades — mantém a variância dos gradientes estável entre camadas.
-- **SGD com mini-batches**: compromisso entre estabilidade do batch gradient descent e velocidade do SGD puro.
-- **Momentum na Config B**: acumula média exponencial dos gradientes, reduz oscilações e converge mais rápido.
+## Por Que Essas Escolhas?
+
+- **ReLU nas camadas ocultas**: é simples, eficiente e ajuda a reduzir o problema de vanishing gradient em redes de profundidade moderada.
+- **Softmax na saída**: transforma os logits em probabilidades para as 10 classes do MNIST.
+- **Cross-Entropy**: é adequada para problemas de classificação multiclasse.
+- **He Initialization**: foi escolhida por funcionar bem com ReLU, ajudando a manter a variância dos sinais mais estável entre as camadas.
+- **Mini-batches**: tornam o treinamento mais eficiente do que usar o dataset inteiro a cada atualização.
+- **Momentum na Configuração B**: ajuda a reduzir oscilações no treinamento e melhora a convergência.
 
 ---
 
@@ -102,74 +103,183 @@ python -m mlp.optimizers
 
 ### Forward Pass
 
-Cada camada l computa:
-```
-Z[l] = W[l] @ A[l-1] + b[l]   ← combinação linear
-A[l] = ReLU(Z[l])              ← ativação (camadas ocultas)
-A[out] = Softmax(Z[out])       ← probabilidades na saída
+Cada camada calcula uma combinação linear seguida de uma ativação.
+
+```txt
+Z[l] = W[l] @ A[l-1] + b[l]
+A[l] = ReLU(Z[l])
 ```
 
-### Backpropagation
+Na camada de saída:
 
-O gradiente flui de trás para frente via regra da cadeia:
-
+```txt
+Z[out] = W[out] @ A[última_oculta] + b[out]
+A[out] = Softmax(Z[out])
 ```
-dZ_out = A_out - Y                  ← gradiente simplificado (Softmax + CE)
-dW[l]  = dZ[l] @ A[l-1].T / m
-db[l]  = mean(dZ[l], axis=1)
+
+A saída final possui 10 valores, representando a probabilidade de a imagem pertencer a cada dígito de 0 a 9.
+
+---
+
+## Backpropagation
+
+O backpropagation foi implementado manualmente usando a regra da cadeia.
+
+Como a saída usa Softmax junto com Cross-Entropy, o gradiente da última camada pode ser simplificado:
+
+```txt
+dZ_out = A_out - Y
+```
+
+Para as demais camadas:
+
+```txt
+dW[l] = dZ[l] @ A[l-1].T / m
+db[l] = mean(dZ[l], axis=1)
 dA_prev = W[l].T @ dZ[l]
-dZ_prev = dA_prev * ReLU'(Z[l-1])  ← elementwise
+dZ_prev = dA_prev * ReLU'(Z[l-1])
 ```
 
-A elegância da combinação Softmax + Cross-Entropy está no gradiente simplificado: em vez de calcular a Jacobiana completa do softmax, a derivada combinada é simplesmente `A_out - Y`.
+Essa etapa foi uma das partes mais importantes da atividade, porque é nela que a rede calcula como cada peso contribuiu para o erro final.
 
-### Atualização SGD
+---
 
+## Atualização dos Pesos
+
+A atualização com SGD segue a fórmula:
+
+```txt
+W[l] = W[l] - learning_rate * dW[l]
+b[l] = b[l] - learning_rate * db[l]
 ```
-W[l] ← W[l] - lr * dW[l]
-b[l] ← b[l] - lr * db[l]
-```
+
+Na Configuração B também foi testado SGD com Momentum, que acumula uma média dos gradientes anteriores para suavizar as atualizações.
 
 ---
 
 ## Resultados
 
-### Tabela Comparativa
+A atividade pedia pelo menos **92% de acurácia no conjunto de teste**.
 
-| Config | Arquitetura | Otimizador | LR | Batch | Épocas | Test Acc |
-|--------|-------------|------------|-----|-------|--------|----------|
-| A — Baseline | 784→256→128→10 | SGD | 0.01 | 128 | 25 | **~96%** |
-| B — Momentum | 784→512→256→128→10 | SGD+Mom | 0.01 | 64 | 30 | **~98%** |
+As duas configurações ultrapassaram essa meta.
 
-### Curvas de Treinamento
+| Configuração | Arquitetura | Otimizador | LR | Batch | Épocas | Test Loss | Test Acc |
+|---|---|---|---:|---:|---:|---:|---:|
+| A — Baseline | 784 → 256 → 128 → 10 | SGD | 0.01 | 128 | 25 | 0.1318 | 96.14% |
+| B — Momentum | 784 → 512 → 256 → 128 → 10 | SGD + Momentum | 0.01 | 64 | 30 | 0.0732 | 97.70% |
+
+A melhor configuração foi a **Configuração B**, com **97.70% de acurácia no teste**.
+
+---
+
+## Curvas de Treinamento
 
 ![Curvas de loss e acurácia](results/curvas_treino.png)
 
-### Matriz de Confusão
+As curvas mostram que:
+
+- a loss diminuiu ao longo das épocas;
+- a acurácia aumentou de forma consistente;
+- a Configuração B teve melhor desempenho final;
+- ambas as configurações superaram a meta de 92%.
+
+---
+
+## Matriz de Confusão
 
 ![Matriz de Confusão](results/confusion_matrix.png)
+
+A matriz de confusão foi usada para analisar os erros da melhor configuração. A maior parte das classificações ficou concentrada na diagonal principal, indicando que o modelo classificou corretamente a maioria das imagens.
+
+Os erros ocorreram principalmente em dígitos visualmente parecidos ou escritos de forma ambígua.
+
+---
+
+## Exemplos de Erros
+
+![Exemplos de erros](results/exemplos_erro.png)
+
+A visualização dos erros ajuda a entender melhor as limitações do modelo. Alguns dígitos classificados incorretamente possuem traços confusos até mesmo para uma pessoa, o que torna o erro mais compreensível.
+
+---
+
+## Validação dos Gradientes
+
+Para verificar se o backpropagation estava correto, foi implementado um **gradient check numérico**.
+
+A ideia foi comparar o gradiente calculado pelo backpropagation com uma aproximação numérica usando diferença central:
+
+```txt
+grad_aproximado = (J(θ + ε) - J(θ - ε)) / (2ε)
+```
+
+Resultado obtido:
+
+```txt
+Diferença máxima relativa: 7.35e-10
+```
+
+Como esse valor é muito pequeno, considerei que os gradientes estavam corretos. Esse teste foi importante porque ajudou a validar matematicamente a implementação do backpropagation.
+
+---
+
+## Observação Sobre o Uso do Conjunto de Teste
+
+No notebook, o conjunto de teste foi usado como referência para acompanhar a acurácia ao longo das épocas. Porém, ele **não foi usado para atualizar os pesos**.
+
+A atualização dos pesos acontece apenas com os mini-batches do conjunto de treino.
+
+Se fosse uma versão mais rigorosa experimentalmente, eu separaria um conjunto específico de validação a partir do treino, deixando o conjunto de teste apenas para a avaliação final.
 
 ---
 
 ## Decisões e Dificuldades
 
-### 1. Qual foi a decisão técnica mais difícil que você tomou?
+### 1. Qual foi a decisão técnica mais difícil?
 
-> Para mim, parte mais trabalhosa foi entender de onde vêm as dimensões das matrizes no backpropagation. Eu sabia a fórmula `dW = dZ @ A_prev.T`, mas levei um tempo até entender POR QUE transpor A_prev: é porque queremos um gradiente da mesma shape que W, e W tem shape (n_out, n_in) — o produto `dZ @ A_prev.T` produz exatamente isso. Quando errei a transposição na primeira vez, a shape ficou errada e o erro foi difícil de debugar.
+A parte mais trabalhosa foi entender de onde vêm as dimensões das matrizes no backpropagation.
 
-### 2. O que você tentou que não funcionou?
+Eu sabia a fórmula:
 
-> Eu tentei inicializar todos os pesos com zero para simplificar. A loss até diminuía um pouco, mas a acurácia ficou travada em ~10% (equivalente a chute aleatório). Depois entendi o problema: com pesos iguais, todos os neurônios de uma mesma camada recebem o mesmo gradiente e aprendem exatamente a mesma coisa — a rede perde toda a sua capacidade expressiva.
->
-> Também tentei um learning rate de 0.5 no início e a loss explodia para NaN após a primeira época. Precisei reduzir bastante até encontrar um valor estável.
+```txt
+dW = dZ @ A_prev.T
+```
 
-### 3. Se fosse refazer do zero, o que faria diferente?
+Mas levei um tempo até entender por que era necessário transpor `A_prev`.
 
-> Eu começaria com o gradient check desde o início, antes de testar no MNIST. Perdi tempo tentando debugar a loss que não caía no dataset completo, quando o problema era um sinal invertido em um gradiente — coisa que o gradient check teria identificado imediatamente em segundos.
+A explicação é que `dW` precisa ter exatamente o mesmo formato de `W`. Como `W` tem shape:
 
+```txt
+(n_out, n_in)
+```
+
+o produto `dZ @ A_prev.T` gera justamente uma matriz nesse formato.
+
+Quando errei essa transposição, os shapes não batiam e o erro foi difícil de debugar.
+
+---
+
+### 2. O que eu tentei que não funcionou?
+
+No começo, tentei inicializar todos os pesos com zero para simplificar.
+
+Isso não funcionou porque todos os neurônios de uma mesma camada recebiam os mesmos gradientes e aprendiam exatamente a mesma coisa. Como consequência, a rede perdia capacidade de aprendizado e a acurácia ficava próxima de um chute aleatório.
+
+Também testei um learning rate muito alto. Quando usei valores maiores, a loss ficou instável e chegou a explodir para `NaN`. Depois reduzi o valor e encontrei um treinamento mais estável com `0.01`.
+
+---
+
+### 3. O que eu faria diferente se fosse refazer?
+
+Se eu fosse refazer o projeto do zero, começaria pelo gradient check antes de treinar no MNIST completo.
+
+Eu perdi tempo tentando debugar a loss no dataset inteiro, quando o problema poderia ser identificado mais rápido usando uma rede pequena e poucos exemplos.
+
+Também separaria um conjunto específico de validação a partir do treino, deixando o conjunto de teste apenas para a avaliação final.
 
 ## Referências
 
 - [Deep Learning Book — Goodfellow, Bengio, Courville](https://www.deeplearningbook.org/)
 - [CS231n — Convolutional Neural Networks for Visual Recognition](https://cs231n.github.io/)
 - [He et al. (2015) — Delving Deep into Rectifiers](https://arxiv.org/abs/1502.01852)
+- [MNIST Dataset](http://yann.lecun.com/exdb/mnist/)
